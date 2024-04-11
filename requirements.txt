@@ -1,8 +1,7 @@
 torch
 scikit-learn
 pandas
-faiss-cpu
-# faiss-gpu
+faiss-gpu
 datasets
 gdown
 ragatouille

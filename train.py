@@ -1,6 +1,4 @@
 import pandas as pd
-from datasets import load_dataset
-import faiss
 from ragatouille import RAGTrainer
 import os
 import torch
@@ -110,25 +108,26 @@ def init_model(
     colbert = colbert.to(DEVICE)
     colbert.train()
 
-    # Initialize the process group
-    # Set environment variables
-    os.environ["MASTER_ADDR"] = (
-        "localhost"  # Or the IP address of the master node if multi-node
-    )
-    os.environ["MASTER_PORT"] = (
-        "12345"  # Any free port that can be used for communication
-    )
-    dist.init_process_group(
-        backend="nccl", init_method="env://", rank=config.rank, world_size=config.nranks
-    )
+    ## For training on a multiple GPU
 
-    # Wrap the model with DistributedDataParallel
-    colbert = torch.nn.parallel.DistributedDataParallel(
-        colbert,
-        device_ids=[config.rank],
-        output_device=config.rank,
-        find_unused_parameters=True,
-    )
+    # # Initialize the process group
+    # # Set environment variables
+    # os.environ["MASTER_ADDR"] = (
+    #     "localhost"  # Or the IP address of the master node if multi-node
+    # )
+    # os.environ["MASTER_PORT"] = (
+    #     "12345"  # Any free port that can be used for communication
+    # )
+    # dist.init_process_group(
+    #     backend="nccl", init_method="env://", rank=config.rank, world_size=config.nranks
+    # )
+    # # Wrap the model with DistributedDataParallel
+    # colbert = torch.nn.parallel.DistributedDataParallel(
+    #     colbert,
+    #     device_ids=[config.rank],
+    #     output_device=config.rank,
+    #     find_unused_parameters=True,
+    # )
 
     optimizer = AdamW(
         filter(lambda p: p.requires_grad, colbert.parameters()), lr=config.lr, eps=1e-8
@@ -155,8 +154,8 @@ def init_model(
 def train(
     num_epochs=40,
     triples="data/triples.train.colbert.jsonl",
-    queries="data/queries.train.colbert.tsv",
-    collection="data/corpus.train.colbert.tsv",
+    queries_path="data/queries.train.colbert.tsv",
+    collection_path="data/corpus.train.colbert.tsv",
 ):
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     config, colbert, optimizer, scheduler = init_model()
@@ -175,11 +174,9 @@ def train(
         print(f"Starting Epoch {epoch + 1}/{num_epochs}")
 
         # Reinitialize or reset the reader here if necessary
-        reader = get_reader(collection, config, triples, queries)
+        reader = get_reader(collection_path, config, triples, queries_path)
 
-        for batch_idx, BatchSteps in zip(
-            range(start_batch_idx, config.maxsteps), reader
-        ):
+        for batch_idx, BatchSteps in zip(range(start_batch_idx, 256), reader):
             # if (warmup_bert is not None) and warmup_bert <= batch_idx:
             #     set_bert_grad(colbert, True)
             #     warmup_bert = None
@@ -256,7 +253,7 @@ def train(
 
         if config.rank < 1:
             print_message(batch_idx, train_loss)
-            epoch_save_path = f"/content/model_checkpoint/epoch_{epoch}/"
+            epoch_save_path = f"./model_checkpoint/epoch_{epoch}/"
             os.makedirs(epoch_save_path, exist_ok=True)
             checkpoint_filename = f"checkpoint_batch_{batch_idx+1}.pt"
             full_checkpoint_path = os.path.join(epoch_save_path, checkpoint_filename)
@@ -286,6 +283,6 @@ if __name__ == "__main__":
     # importing data
     data = pd.read_csv("./data/content.csv")
     train_dataset = pd.read_csv("./data/q_n_a.csv")
-    
+
     prepare_data(data, train_dataset)
     train()
