@@ -5,7 +5,7 @@ from ragatouille import RAGTrainer
 import os
 import torch
 from colbert.infra import ColBERTConfig
-from colbert.training import RerankBatcher
+from colbert.training.rerank_batcher import RerankBatcher
 import torch.nn as nn
 from transformers import AdamW, get_linear_schedule_with_warmup
 from colbert.infra import ColBERTConfig
@@ -23,20 +23,12 @@ import torch.distributed as dist
 def prepare_data(
     content,
     train_qna,
-    test_qna,
     output_data_path="./data/",
     model_name="MyFineTunedColBERT",
     checkpoint="colbert-ir/colbertv2.0",
 ):
     train_df = pd.merge(
         train_qna,
-        content[["id", "content"]],
-        how="left",
-        left_on="content_row",
-        right_on="id",
-    )
-    eval_df = pd.merge(
-        test_qna,
         content[["id", "content"]],
         how="left",
         left_on="content_row",
@@ -292,9 +284,8 @@ def train(
 
 if __name__ == "__main__":
     # importing data
-    data = pd.read_csv("data.csv")
-    dataset = load_dataset("SoorajK1/questions_and_answers")
-    train_dataset = pd.DataFrame(dataset["train"])
-    eval_dataset = pd.DataFrame(dataset["test"])
-    prepare_data(data, train_dataset, eval_dataset)
+    data = pd.read_csv("./data/content.csv")
+    train_dataset = pd.read_csv("./data/q_n_a.csv")
+    
+    prepare_data(data, train_dataset)
     train()
